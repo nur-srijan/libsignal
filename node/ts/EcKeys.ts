@@ -84,6 +84,10 @@ export class PrivateKey {
     return new PrivateKey(Native.PrivateKey_Generate());
   }
 
+  static generateDilithium2(): PrivateKey {
+    return new PrivateKey(Native.PrivateKey_GenerateDilithium2());
+  }
+
   static deserialize(buf: Uint8Array): PrivateKey {
     return new PrivateKey(Native.PrivateKey_Deserialize(buf));
   }
@@ -139,6 +143,14 @@ export class IdentityKeyPair {
   static generate(): IdentityKeyPair {
     const privateKey = PrivateKey.generate();
     return new IdentityKeyPair(privateKey.getPublicKey(), privateKey);
+  }
+
+  static generateDilithium2(): IdentityKeyPair {
+    const { publicKey, privateKey } = Native.IdentityKeyPair_GenerateDilithium2();
+    return new IdentityKeyPair(
+      PublicKey._fromNativeHandle(publicKey),
+      PrivateKey._fromNativeHandle(privateKey)
+    );
   }
 
   static deserialize(buffer: Uint8Array): IdentityKeyPair {

@@ -105,11 +105,14 @@ impl IdentityKeyPair {
     }
 
     /// Generate a random new Dilithium identity from randomness in `csprng`.
-    ///
-    /// NOTE: This is a stub. Actual Dilithium key generation must be implemented.
     pub fn generate_dilithium<R: CryptoRng + Rng>(_csprng: &mut R) -> Self {
-        // TODO: Implement Dilithium key generation
-        unimplemented!("Dilithium identity key generation not implemented yet");
+        let private_key = PrivateKey::generate_dilithium2().expect("Failed to generate Dilithium2 key");
+        let public_key = private_key.public_key().expect("Failed to get public key from Dilithium2 private key");
+        let identity_key = IdentityKey::new(public_key);
+        Self {
+            identity_key,
+            private_key,
+        }
     }
 
     /// Return the public identity of this user.
@@ -232,10 +235,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_generate_dilithium_identity_key_pair() {
-        // This test will fail until Dilithium key generation is implemented
-        let _dilithium_identity = IdentityKeyPair::generate_dilithium(&mut OsRng.unwrap_err());
+        use rand::rngs::OsRng;
+        use libsignal_core::curve::KeyType;
+        
+        let dilithium_identity = IdentityKeyPair::generate_dilithium(&mut OsRng.unwrap_err());
+        assert_eq!(dilithium_identity.private_key().key_type(), KeyType::Dilithium2);
+        assert_eq!(dilithium_identity.public_key().key_type(), KeyType::Dilithium2);
     }
 
     #[test]
