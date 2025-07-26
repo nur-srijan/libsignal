@@ -245,6 +245,73 @@ mod tests {
     }
 
     #[test]
+    fn test_mixed_ec_dilithium_identity_keys() {
+        use rand::rngs::OsRng;
+        use libsignal_core::curve::KeyType;
+        
+        // Generate both EC and Dilithium identity key pairs
+        let ec_identity = IdentityKeyPair::generate(&mut OsRng.unwrap_err());
+        let dilithium_identity = IdentityKeyPair::generate_dilithium(&mut OsRng.unwrap_err());
+        
+        // Verify key types
+        assert_eq!(ec_identity.private_key().key_type(), KeyType::Djb);
+        assert_eq!(ec_identity.public_key().key_type(), KeyType::Djb);
+        assert_eq!(dilithium_identity.private_key().key_type(), KeyType::Dilithium2);
+        assert_eq!(dilithium_identity.public_key().key_type(), KeyType::Dilithium2);
+        
+        // Test serialization of both
+        let ec_serialized = ec_identity.serialize();
+        let dilithium_serialized = dilithium_identity.serialize();
+        
+        // Different lengths for different key types
+        assert_ne!(ec_serialized.len(), dilithium_serialized.len());
+        
+        // Test deserialization
+        let ec_deserialized = IdentityKeyPair::try_from(ec_serialized.as_ref()).expect("EC deserialization failed");
+        let dilithium_deserialized = IdentityKeyPair::try_from(dilithium_serialized.as_ref()).expect("Dilithium deserialization failed");
+        
+        // Verify key types after deserialization
+        assert_eq!(ec_deserialized.private_key().key_type(), KeyType::Djb);
+        assert_eq!(dilithium_deserialized.private_key().key_type(), KeyType::Dilithium2);
+    }
+
+    #[test]
+    fn test_dilithium_signature_verification() {
+        use rand::rngs::OsRng;
+        
+        let dilithium_identity = IdentityKeyPair::generate_dilithium(&mut OsRng.unwrap_err());
+        let message = b"Test message for Dilithium signature";
+        
+        // Sign with Dilithium private key
+        let signature = dilithium_identity.private_key().calculate_signature(message, &mut OsRng.unwrap_err()).expect("Dilithium signing failed");
+        
+        // Verify with Dilithium public key
+        let verification_result = dilithium_identity.public_key().verify_signature(message, &signature);
+        assert!(verification_result, "Dilithium signature verification failed");
+        
+        // Test with wrong message should fail
+        let wrong_message = b"Wrong message";
+        let wrong_verification = dilithium_identity.public_key().verify_signature(wrong_message, &signature);
+        assert!(!wrong_verification, "Dilithium signature should fail for wrong message");
+    }
+
+    #[test]
+    fn test_cross_key_type_signature_failure() {
+        use rand::rngs::OsRng;
+        
+        let ec_identity = IdentityKeyPair::generate(&mut OsRng.unwrap_err());
+        let dilithium_identity = IdentityKeyPair::generate_dilithium(&mut OsRng.unwrap_err());
+        let message = b"Test message";
+        
+        // Sign with EC key
+        let ec_signature = ec_identity.private_key().calculate_signature(message, &mut OsRng.unwrap_err()).expect("EC signing failed");
+        
+        // Try to verify EC signature with Dilithium key (should fail)
+        let cross_verification = dilithium_identity.public_key().verify_signature(message, &ec_signature);
+        assert!(!cross_verification, "Cross key type verification should fail");
+    }
+
+    #[test]
     fn test_alternate_identity_signing() -> Result<()> {
         let mut rng = OsRng.unwrap_err();
         let primary = IdentityKeyPair::generate(&mut rng);
