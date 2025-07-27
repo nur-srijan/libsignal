@@ -1755,6 +1755,8 @@ SignalFfiError *signal_identitykeypair_serialize(SignalOwnedBuffer *out, SignalC
 
 SignalFfiError *signal_identitykeypair_sign_alternate_identity(SignalOwnedBuffer *out, SignalConstPointerPublicKey public_key, SignalConstPointerPrivateKey private_key, SignalConstPointerPublicKey other_identity);
 
+SignalFfiError *signal_identitykeypair_generate_dilithium2(SignalMutPointerPrivateKey *private_key, SignalMutPointerPublicKey *public_key);
+
 SignalFfiError *signal_incremental_mac_calculate_chunk_size(uint32_t *out, uint32_t data_size);
 
 SignalFfiError *signal_incremental_mac_destroy(SignalMutPointerIncrementalMac p);
@@ -2000,6 +2002,8 @@ SignalFfiError *signal_privatekey_deserialize(SignalMutPointerPrivateKey *out, S
 SignalFfiError *signal_privatekey_destroy(SignalMutPointerPrivateKey p);
 
 SignalFfiError *signal_privatekey_generate(SignalMutPointerPrivateKey *out);
+
+SignalFfiError *signal_privatekey_generate_dilithium2(SignalMutPointerPrivateKey *out);
 
 SignalFfiError *signal_privatekey_get_public_key(SignalMutPointerPublicKey *out, SignalConstPointerPrivateKey k);
 

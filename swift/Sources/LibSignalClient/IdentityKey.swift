@@ -47,6 +47,19 @@ public struct IdentityKeyPair: Sendable {
         return IdentityKeyPair(publicKey: publicKey, privateKey: privateKey)
     }
 
+    public static func generateDilithium2() -> IdentityKeyPair {
+        var pubkeyPtr = SignalMutPointerPublicKey()
+        var privkeyPtr = SignalMutPointerPrivateKey()
+        
+        failOnError {
+            try checkError(signal_identitykeypair_generate_dilithium2(&privkeyPtr, &pubkeyPtr))
+        }
+
+        let publicKey = PublicKey(owned: NonNull(pubkeyPtr)!)
+        let privateKey = PrivateKey(owned: NonNull(privkeyPtr)!)
+        return IdentityKeyPair(publicKey: publicKey, privateKey: privateKey)
+    }
+
     public init<Bytes: ContiguousBytes>(bytes: Bytes) throws {
         var pubkeyPtr = SignalMutPointerPublicKey()
         var privkeyPtr = SignalMutPointerPrivateKey()

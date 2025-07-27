@@ -262,6 +262,25 @@ fn KyberKeyPair_GetSecretKey(key_pair: &KyberKeyPair) -> KyberSecretKey {
     key_pair.secret_key.clone()
 }
 
+// === PQC: Dilithium bridge functions ===
+#[bridge_fn(ffi = "privatekey_generate_dilithium2", node = "PrivateKey_GenerateDilithium2")]
+fn ECPrivateKey_GenerateDilithium2() -> Result<PrivateKey> {
+    Ok(PrivateKey::generate_dilithium2()?)
+}
+
+#[bridge_fn(ffi = "identitykeypair_generate_dilithium2", node = "IdentityKeyPair_GenerateDilithium2")]
+fn IdentityKeyPair_GenerateDilithium2() -> Result<(PublicKey, PrivateKey)> {
+    let mut rng = rand::rngs::OsRng;
+    let identity_key_pair = IdentityKeyPair::generate_dilithium(&mut rng);
+    Ok((identity_key_pair.identity_key().public_key(), identity_key_pair.private_key()))
+}
+
+#[bridge_fn(ffi = "identitykeypair_deserialize", node = "IdentityKeyPair_Deserialize")]
+fn IdentityKeyPair_Deserialize(data: &[u8]) -> Result<(PublicKey, PrivateKey)> {
+    let identity_key_pair = IdentityKeyPair::deserialize(data)?;
+    Ok((identity_key_pair.identity_key().public_key(), identity_key_pair.private_key()))
+}
+
 #[bridge_fn(ffi = "identitykeypair_serialize")]
 fn IdentityKeyPair_Serialize(public_key: &PublicKey, private_key: &PrivateKey) -> Vec<u8> {
     let identity_key_pair = IdentityKeyPair::new(IdentityKey::new(*public_key), *private_key);

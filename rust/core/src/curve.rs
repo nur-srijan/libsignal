@@ -586,4 +586,82 @@ mod tests {
         let error = Box::new(error) as Box<dyn std::error::Error>;
         assert_matches!(error.downcast_ref(), Some(CurveError::BadKeyType(_)));
     }
+
+    #[cfg(test)]
+    fn benchmark_ec_operations() {
+        use std::time::Instant;
+        
+        let mut rng = OsRng.unwrap_err();
+        let message = b"Performance test message for signature benchmarking";
+        
+        // EC key generation benchmark
+        let start = Instant::now();
+        for _ in 0..100 {
+            let _ = KeyPair::generate(&mut rng);
+        }
+        let ec_keygen_time = start.elapsed();
+        println!("EC key generation (100 iterations): {:?}", ec_keygen_time);
+        
+        // EC signing benchmark
+        let ec_keypair = KeyPair::generate(&mut rng);
+        let start = Instant::now();
+        for _ in 0..100 {
+            let _ = ec_keypair.private_key.calculate_signature(message, &mut rng).unwrap();
+        }
+        let ec_sign_time = start.elapsed();
+        println!("EC signing (100 iterations): {:?}", ec_sign_time);
+        
+        // EC verification benchmark
+        let signature = ec_keypair.private_key.calculate_signature(message, &mut rng).unwrap();
+        let start = Instant::now();
+        for _ in 0..100 {
+            let _ = ec_keypair.public_key.verify_signature(message, &signature);
+        }
+        let ec_verify_time = start.elapsed();
+        println!("EC verification (100 iterations): {:?}", ec_verify_time);
+    }
+
+    #[cfg(test)]
+    fn benchmark_dilithium_operations() {
+        use std::time::Instant;
+        
+        let mut rng = OsRng.unwrap_err();
+        let message = b"Performance test message for signature benchmarking";
+        
+        // Dilithium key generation benchmark
+        let start = Instant::now();
+        for _ in 0..100 {
+            let _ = PrivateKey::generate_dilithium2().unwrap();
+        }
+        let dilithium_keygen_time = start.elapsed();
+        println!("Dilithium key generation (100 iterations): {:?}", dilithium_keygen_time);
+        
+        // Dilithium signing benchmark
+        let dilithium_private = PrivateKey::generate_dilithium2().unwrap();
+        let start = Instant::now();
+        for _ in 0..100 {
+            let _ = dilithium_private.calculate_signature(message, &mut rng).unwrap();
+        }
+        let dilithium_sign_time = start.elapsed();
+        println!("Dilithium signing (100 iterations): {:?}", dilithium_sign_time);
+        
+        // Dilithium verification benchmark
+        let dilithium_public = dilithium_private.public_key().unwrap();
+        let signature = dilithium_private.calculate_signature(message, &mut rng).unwrap();
+        let start = Instant::now();
+        for _ in 0..100 {
+            let _ = dilithium_public.verify_signature(message, &signature);
+        }
+        let dilithium_verify_time = start.elapsed();
+        println!("Dilithium verification (100 iterations): {:?}", dilithium_verify_time);
+    }
+
+    #[test]
+    fn test_performance_benchmarks() {
+        println!("\n=== Performance Benchmarks ===");
+        benchmark_ec_operations();
+        println!();
+        benchmark_dilithium_operations();
+        println!("=== End Benchmarks ===\n");
+    }
 }

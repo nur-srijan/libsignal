@@ -42,6 +42,24 @@ public class IdentityKeyPair {
     return new IdentityKeyPair(new IdentityKey(publicKey), privateKey);
   }
 
+  /**
+   * Generate a new Dilithium2 identity key pair.
+   * 
+   * Note: This creates an IdentityKeyPair that contains PQC keys but wraps them
+   * in ECPrivateKey for compatibility. Future versions may use a more generic approach.
+   * 
+   * @return A new IdentityKeyPair with Dilithium2 keys
+   */
+  public static IdentityKeyPair generateDilithium2() {
+    long[] tuple = Native.IdentityKeyPair_GenerateDilithium2();
+    long publicKeyHandle = tuple[0];
+    long privateKeyHandle = tuple[1];
+
+    IdentityKey identityKey = new IdentityKey(publicKeyHandle);
+    ECPrivateKey privateKey = new ECPrivateKey(privateKeyHandle);
+    return new IdentityKeyPair(identityKey, privateKey);
+  }
+
   public IdentityKey getPublicKey() {
     return publicKey;
   }

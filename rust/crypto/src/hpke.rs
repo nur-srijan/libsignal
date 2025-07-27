@@ -84,6 +84,9 @@ impl SimpleHpkeSender for libsignal_core::curve::PublicKey {
             libsignal_core::curve::KeyType::Djb => {
                 SignalHpkeCiphertextType::Base_X25519_HkdfSha256_Aes256Gcm
             }
+            libsignal_core::curve::KeyType::Dilithium2 => {
+                return Err(HpkeError::InvalidInput);
+            }
         };
 
         let hpke_key = HpkePublicKey::from(self.public_key_bytes());
@@ -141,6 +144,12 @@ impl SimpleHpkeReceiver for libsignal_core::curve::PrivateKey {
                 SignalHpkeCiphertextType::Base_X25519_HkdfSha256_Aes256Gcm,
                 libsignal_core::curve::KeyType::Djb,
             ) => {}
+            (
+                SignalHpkeCiphertextType::Base_X25519_HkdfSha256_Aes256Gcm,
+                libsignal_core::curve::KeyType::Dilithium2,
+            ) => {
+                return Err(HpkeError::InvalidInput);
+            }
         }
 
         let (encapsulated_secret, ciphertext) = ciphertext

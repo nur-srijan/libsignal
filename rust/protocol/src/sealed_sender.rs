@@ -582,10 +582,11 @@ impl<'a> UnidentifiedSenderMessage<'a> {
                     ephemeral_public,
                 } = zerocopy::Ref::into_ref(prefix);
 
+                // Create a DJB public key by prepending the key type byte and deserializing
+                let mut key_with_type = vec![0x05u8]; // DJB key type identifier
+                key_with_type.extend_from_slice(ephemeral_public.as_slice());
                 Ok(Self::V2 {
-                    ephemeral_public: PublicKey::from_djb_public_key_bytes(
-                        ephemeral_public.as_slice(),
-                    )?,
+                    ephemeral_public: PublicKey::deserialize(&key_with_type)?,
                     encrypted_message_key,
                     authentication_tag: encrypted_authentication_tag,
                     encrypted_message,

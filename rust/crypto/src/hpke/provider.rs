@@ -79,8 +79,10 @@ impl HpkeCrypto for CryptoProvider {
             KemAlgorithm::DhKem25519 => {}
             _ => return Err(HpkeError::UnknownKemAlgorithm),
         }
-        let pk =
-            PublicKey::from_djb_public_key_bytes(pk).map_err(|_| HpkeError::KemInvalidPublicKey)?;
+        // Create a DJB public key by prepending the key type byte and deserializing
+        let mut key_with_type = vec![0x05u8]; // DJB key type identifier
+        key_with_type.extend_from_slice(pk);
+        let pk = PublicKey::deserialize(&key_with_type).map_err(|_| HpkeError::KemInvalidPublicKey)?;
         let sk = PrivateKey::deserialize(sk).map_err(|_| HpkeError::KemInvalidSecretKey)?;
         Ok(sk
             .calculate_agreement(&pk)
