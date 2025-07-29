@@ -8,14 +8,14 @@ use std::io::{stdout, Write as _};
 use aes::cipher::crypto_common::rand_core::{OsRng, RngCore};
 use clap::{ArgAction, Parser};
 use clap_stdin::FileOrStdin;
-use libsignal_account_keys::proto::backup_metadata::{metadata_pb, MetadataPb};
-use libsignal_account_keys::proto::Message as _;
 use libsignal_cli_utils::read_file;
 use libsignal_message_backup::args::parse_hex_bytes;
 use libsignal_message_backup::export::{
     aes_cbc_encrypt, gzip_compress, hmac_checksum, pad_gzipped_bucketed,
 };
 use libsignal_message_backup::key::MessageBackupKey;
+use libsignal_svrb::proto::backup_metadata::{metadata_pb, MetadataPb};
+use libsignal_svrb::proto::Message as _;
 
 #[path = "../src/bin/support/mod.rs"]
 mod support;

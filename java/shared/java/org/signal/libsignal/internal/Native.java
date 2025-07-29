@@ -206,6 +206,11 @@ public final class Native {
   public static native byte[] BackupKey_DeriveMediaId(byte[] backupKey, String mediaName);
   public static native byte[] BackupKey_DeriveThumbnailTransitEncryptionKey(byte[] backupKey, byte[] mediaId);
 
+  public static native void BackupResponse_Destroy(long handle);
+  public static native byte[] BackupResponse_GetForwardSecrecyToken(long response) throws Exception;
+  public static native byte[] BackupResponse_GetNextBackupSecretData(long response);
+  public static native byte[] BackupResponse_GetOpaqueMetadata(long response) throws Exception;
+
   public static native void BridgedStringMap_Destroy(long handle);
   public static native void BridgedStringMap_insert(long map, String key, String value);
   public static native long BridgedStringMap_new(int initialCapacity);
@@ -436,8 +441,8 @@ public final class Native {
   public static native void LookupRequest_setToken(long request, byte[] token);
 
   public static native void MessageBackupKey_Destroy(long handle);
-  public static native long MessageBackupKey_FromAccountEntropyPool(String accountEntropy, byte[] aci);
-  public static native long MessageBackupKey_FromBackupKeyAndBackupId(byte[] backupKey, byte[] backupId);
+  public static native long MessageBackupKey_FromAccountEntropyPool(String accountEntropy, byte[] aci, byte[] forwardSecrecyToken);
+  public static native long MessageBackupKey_FromBackupKeyAndBackupId(byte[] backupKey, byte[] backupId, byte[] forwardSecrecyToken);
   public static native long MessageBackupKey_FromParts(byte[] hmacKey, byte[] aesKey);
   public static native byte[] MessageBackupKey_GetAesKey(long key);
   public static native byte[] MessageBackupKey_GetHmacKey(long key);
@@ -606,6 +611,10 @@ public final class Native {
   public static native byte[] SealedSessionCipher_MultiRecipientEncrypt(long[] recipients, long[] recipientSessions, byte[] excludedRecipients, long content, IdentityKeyStore identityKeyStore) throws Exception;
   public static native byte[] SealedSessionCipher_MultiRecipientMessageForSingleRecipient(byte[] encodedMultiRecipientMessage) throws Exception;
 
+  public static native long SecureValueRecoveryForBackups_CreateStoreArgs(byte[] backupKey, byte[] previousSecretData, int environment);
+  public static native CompletableFuture<byte[]> SecureValueRecoveryForBackups_RestoreBackupFromServer(long asyncRuntime, byte[] backupKey, byte[] metadata, long connectionManager, String username, String password);
+  public static native CompletableFuture<Long> SecureValueRecoveryForBackups_StoreBackup(long asyncRuntime, long store, long connectionManager, String username, String password);
+
   public static native long SenderCertificate_Deserialize(byte[] data) throws Exception;
   public static native void SenderCertificate_Destroy(long handle);
   public static native byte[] SenderCertificate_GetCertificate(long obj) throws Exception;
@@ -736,6 +745,8 @@ public final class Native {
   public static native byte[] SignedPreKeyRecord_GetSignature(long obj) throws Exception;
   public static native long SignedPreKeyRecord_GetTimestamp(long obj) throws Exception;
   public static native long SignedPreKeyRecord_New(int id, long timestamp, long pubKey, long privKey, byte[] signature);
+
+  public static native void StoreArgs_Destroy(long handle);
 
   public static native long Svr2Client_New(byte[] mrenclave, byte[] attestationMsg, long currentTimestamp) throws Exception;
 
