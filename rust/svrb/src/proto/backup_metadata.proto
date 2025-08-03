@@ -16,9 +16,21 @@ message MetadataPb {
   }
   // newest are first
   repeated Pair pair = 1;
+  bytes iv = 2;  // IV used for all pairs' cts.
 }
 
 message NextBackupPb {
-  bytes pw_salt = 1;
-  backup4.Backup4 backup4 = 2;
+  oneof from_previous {
+    Backup backup = 1;
+    Restore restore = 2;
+  }
+
+  message Backup {
+    bytes pw_salt = 1;
+    backup4.Backup4 backup4 = 2;
+  }
+  message Restore {
+    bytes pw_salt = 1;
+    bytes enc_salt = 2;
+  }
 }

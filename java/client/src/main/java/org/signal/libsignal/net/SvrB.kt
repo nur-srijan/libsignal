@@ -30,31 +30,32 @@ import org.signal.libsignal.messagebackup.BackupKey
  * ## Storage Flow
  *
  * 1. Create a [Network] instance and get the [SvrB] service via [Network.svrB]
- * 2. Call [SvrB.store]
- *    - Pass the secret data from the last **successful** [SvrB.store] call
- *    - If no previous backup exists or the secret data is unavailable, pass `null`
- * 3. Use the returned forward secrecy token to derive encryption keys
- * 4. Encrypt and upload the backup data to the user's remote, off-device storage location, including the
+ * 2. If this is a fresh install, call [SvrB.createNewBackupChain] and store the result locally.
+ *    Otherwise, retrieve the secret data from the last **successful** backup operation (store or restore).
+ * 3. Call [SvrB.store]
+ * 4. Use the returned forward secrecy token to derive encryption keys
+ * 5. Encrypt and upload the backup data to the user's remote, off-device storage location, including the
  *    returned [SvrBStoreResponse.metadata]. The upload **must succeed**
  *    before proceeding or the previous backup might become unretrievable.
- * 5. Store the [SvrBStoreResponse.nextBackupSecretData] locally, overwriting any previously-saved value.
+ * 6. Store the [SvrBStoreResponse.nextBackupSecretData] locally, overwriting any previously-saved value.
  *
  * ## Secret handling
  *
  * When calling [SvrB.store], the `previousSecretData` parameter
- * must be from the last call to [SvrB.store] that
- * succeeded. The returned secret from a successful `store()` call should
+ * must be from the last call to [SvrB.store] or [SvrB.restore] that
+ * succeeded. The returned secret from a successful `store()` or `restore()` call should
  * be persisted until it is overwritten by the value from a subsequent
- * successful call. The caller should pass `null` as `previousSecretData`
- * only for the very first backup from a device.
+ * successful call. The caller should use [SvrB.createNewBackupChain] only for the very first
+ * backup with a particular backup key.
  *
  * ## Restore Flow
  *
  * 1. Create a [Network] instance and get the [SvrB] service via [Network.svrB]
  * 2. Fetch the backup metadata from storage
- * 3. Call [SvrB.fetchForwardSecrecyTokenFromServer] to get the forward secrecy token
+ * 3. Call [SvrB.restore] to get the forward secrecy token
  * 4. Use the token to derive decryption keys
  * 5. Decrypt and restore the backup data
+ * 6. Store the [SvrBRestoreResponse.nextBackupSecretData] locally.
  *
  * ## Usage
  * ```kotlin
@@ -77,6 +78,19 @@ public class SvrB internal constructor(
 ) {
 
   /**
+   * Generates backup "secret data" for a fresh install.
+   *
+   * Should not be used if any previous backups exist for this `backupKey`, whether uploaded or
+   * restored by the local device. See [SvrB] for more information.
+   */
+  public fun createNewBackupChain(backupKey: BackupKey): ByteArray {
+    return Native.SecureValueRecoveryForBackups_CreateNewBackupChain(
+      network.connectionManager.environment().value,
+      backupKey.internalContentsForJNI,
+    )
+  }
+
+  /**
    * Prepares a backup for storage with forward secrecy guarantees.
    *
    * This makes a network call to the SVR-B server to store the forward secrecy token
@@ -85,63 +99,46 @@ public class SvrB internal constructor(
    *
    * @param backupKey The backup key derived from the Account Entropy Pool (AEP).
    * @param previousSecretData Optional secret data from the most recent previous backup.
-   * **Critical**: This MUST be the [SvrBStoreResponse.nextBackupSecretData] data
-   * from the last [store] whose returned [SvrBStoreResponse.metadata] was
-   * successfully uploaded, and whose `nextBackupSecretData` was persisted.
-   * If `null`, starts a new chain and renders any prior backups unretrievable; this should
-   * only be used for the very first backup from a device.
+   * **Critical**: This MUST be the secret data from the most recent of the following:
+   * - the last [store] call whose returned [SvrBStoreResponse.metadata] was
+   *   successfully uploaded, and whose `nextBackupSecretData` was persisted.
+   * - the last [restore] call
+   * - the already-persisted result from [createNewBackupChain], only if neither of the other
+   *   two are available.
    * @return a [CompletableFuture] that completes with:
    *   - [Result.success] containing [SvrBStoreResponse] with the forward secrecy token, metadata, and secret data on success
    *   - [Result.failure] containing [SvrException] if the previous secret data is malformed, or for encryption/decryption errors
    *   - [Result.failure] containing [NetworkException] if the network operation fails (connection, service, or timeout errors)
    *   - [Result.failure] containing [NetworkProtocolException] if there is a protocol error
    *   - [Result.failure] containing [AttestationFailedException] if enclave attestation fails
-   *   - [Result.failure] containing [DataMissingException] if the request fails with MISSING status
    *   - [Result.failure] containing [SvrException] for other SVR request failures
    */
   public fun store(
     backupKey: BackupKey,
-    previousSecretData: ByteArray?,
+    previousSecretData: ByteArray,
   ): CompletableFuture<Result<SvrBStoreResponse>> {
-    class StoreArgs internal constructor(
-      nativeHandle: Long,
-    ) : NativeHandleGuard.SimpleOwner(nativeHandle) {
-      override fun release(nativeHandle: Long) {
-        Native.StoreArgs_Destroy(nativeHandle)
-      }
-    }
-
-    val storeArgs = StoreArgs(
-      Native.SecureValueRecoveryForBackups_CreateStoreArgs(
-        backupKey.internalContentsForJNI,
-        previousSecretData ?: byteArrayOf(),
-        network.connectionManager.environment().value,
-      ),
-    )
-
     val nativeFuture = network.asyncContext.guardedMap { asyncContextHandle ->
       network.connectionManager.guardedMap { connectionManagerHandle ->
-        storeArgs.guardedMap { storeArgsHandle ->
-          Native.SecureValueRecoveryForBackups_StoreBackup(
-            asyncContextHandle,
-            storeArgsHandle,
-            connectionManagerHandle,
-            username,
-            password,
-          )
-        }
+        Native.SecureValueRecoveryForBackups_StoreBackup(
+          asyncContextHandle,
+          backupKey.internalContentsForJNI,
+          previousSecretData,
+          connectionManagerHandle,
+          username,
+          password,
+        )
       }
     }
 
     return nativeFuture.thenApply { backupResponseHandle ->
-      val response = BackupResponse(backupResponseHandle)
+      val response = BackupStoreResponse(backupResponseHandle)
       response.guardedMap { _ ->
         SvrBStoreResponse(
           forwardSecrecyToken = BackupForwardSecrecyToken(
-            response.guardedMapChecked(Native::BackupResponse_GetForwardSecrecyToken),
+            response.guardedMapChecked(Native::BackupStoreResponse_GetForwardSecrecyToken),
           ),
-          nextBackupSecretData = response.guardedMapChecked(Native::BackupResponse_GetNextBackupSecretData),
-          metadata = response.guardedMapChecked(Native::BackupResponse_GetOpaqueMetadata),
+          nextBackupSecretData = response.guardedMapChecked(Native::BackupStoreResponse_GetNextBackupSecretData),
+          metadata = response.guardedMapChecked(Native::BackupStoreResponse_GetOpaqueMetadata),
         )
       }
     }.toResultFuture()
@@ -159,6 +156,7 @@ public class SvrB internal constructor(
    * 2. Call this function to retrieve the forward secrecy token from SVR-B
    * 3. Use the token to derive message backup keys
    * 4. Decrypt and restore the backup data
+   * 5. Store the returned [SvrBRestoreResponse.nextBackupSecretData] locally.
    *
    * @param backupKey The backup key derived from the Account Entropy Pool (AEP).
    * @param metadata The metadata that was stored in a header in the backup file during backup creation.
@@ -172,10 +170,10 @@ public class SvrB internal constructor(
    *   - [Result.failure] containing [AttestationFailedException] if enclave attestation fails
    *   - [Result.failure] containing [SvrException] for other SVR request failures
    */
-  public fun fetchForwardSecrecyTokenFromServer(
+  public fun restore(
     backupKey: BackupKey,
     metadata: ByteArray,
-  ): CompletableFuture<Result<BackupForwardSecrecyToken>> {
+  ): CompletableFuture<Result<SvrBRestoreResponse>> {
     val nativeFuture = network.asyncContext.guardedMap { asyncContextHandle ->
       network.connectionManager.guardedMap { connectionManagerHandle ->
         Native.SecureValueRecoveryForBackups_RestoreBackupFromServer(
@@ -189,8 +187,16 @@ public class SvrB internal constructor(
       }
     }
 
-    return nativeFuture.thenApply { bytes ->
-      BackupForwardSecrecyToken(bytes)
+    return nativeFuture.thenApply { backupResponseHandle ->
+      val response = BackupRestoreResponse(backupResponseHandle)
+      response.guardedMap { _ ->
+        SvrBRestoreResponse(
+          forwardSecrecyToken = BackupForwardSecrecyToken(
+            response.guardedMapChecked(Native::BackupRestoreResponse_GetForwardSecrecyToken),
+          ),
+          nextBackupSecretData = response.guardedMapChecked(Native::BackupRestoreResponse_GetNextBackupSecretData),
+        )
+      }
     }.toResultFuture()
   }
 }
@@ -198,11 +204,22 @@ public class SvrB internal constructor(
 /**
  * Native handle wrapper for backup response from the store operation.
  */
-private class BackupResponse internal constructor(
+private class BackupStoreResponse internal constructor(
   nativeHandle: Long,
 ) : NativeHandleGuard.SimpleOwner(nativeHandle) {
   override fun release(nativeHandle: Long) {
-    Native.BackupResponse_Destroy(nativeHandle)
+    Native.BackupStoreResponse_Destroy(nativeHandle)
+  }
+}
+
+/**
+ * Native handle wrapper for backup response from the restore operation.
+ */
+private class BackupRestoreResponse internal constructor(
+  nativeHandle: Long,
+) : NativeHandleGuard.SimpleOwner(nativeHandle) {
+  override fun release(nativeHandle: Long) {
+    Native.BackupRestoreResponse_Destroy(nativeHandle)
   }
 }
 
@@ -242,4 +259,32 @@ public data class SvrBStoreResponse(
    * the backup file.
    */
   public val metadata: ByteArray,
+)
+
+/**
+ * The result of restoring a backup.
+ *
+ * This context contains all the necessary components to decrypt a backup using a
+ * key derived from both the user's Account Entropy Pool and the SVR-B-protected
+ * Forward Secrecy Token.
+ *
+ * @see [BackupForwardSecrecyToken]
+ */
+public data class SvrBRestoreResponse(
+  /**
+   * The forward secrecy token used to derive [MessageBackupKey] instances.
+   *
+   * This token provides forward secrecy guarantees by ensuring that compromise of the backup key
+   * alone is insufficient to decrypt backups. Each backup is protected by a value stored on
+   * the SVR-B server that must be retrieved during restoration.
+   */
+  public val forwardSecrecyToken: BackupForwardSecrecyToken,
+
+  /**
+   * Opaque value that must be persisted and provided to the next call to [SvrB.store].
+   *
+   * See the [SvrB] documentation for lifecycle and persistence handling
+   * for this value.
+   */
+  public val nextBackupSecretData: ByteArray,
 )

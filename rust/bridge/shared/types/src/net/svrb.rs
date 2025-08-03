@@ -4,7 +4,7 @@
 //
 
 use async_trait::async_trait;
-use libsignal_account_keys::BackupKey;
+use libsignal_account_keys::BACKUP_KEY_LEN;
 use libsignal_net::auth::Auth;
 use libsignal_net::enclave::PpssSetup;
 use libsignal_net::env::SvrBEnv;
@@ -12,22 +12,17 @@ use libsignal_net::infra::tcp_ssl::InvalidProxyConfig;
 use libsignal_net::svr::SvrConnection;
 use libsignal_net::svrb as svrb_impl;
 use libsignal_net::svrb::traits::SvrBConnect;
-use libsignal_net::svrb::BackupResponse;
+use libsignal_net::svrb::{BackupRestoreResponse, BackupStoreResponse};
 // Re-export the error type for FFI implementations
 pub use svrb_impl::Error;
 
-use crate::net::{ConnectionManager, Environment};
+use crate::net::ConnectionManager;
 use crate::*;
 
-bridge_as_handle!(BackupResponse);
+bridge_as_handle!(BackupStoreResponse);
+bridge_as_handle!(BackupRestoreResponse);
 
-pub struct StoreArgs {
-    pub backup_key: BackupKey,
-    pub previous_secret_data: Box<[u8]>,
-    pub environment: Environment,
-}
-
-bridge_as_handle!(StoreArgs);
+pub type BackupKeyBytes = [u8; BACKUP_KEY_LEN];
 
 pub struct SvrBConnectImpl<'a> {
     pub connection_manager: &'a ConnectionManager,
