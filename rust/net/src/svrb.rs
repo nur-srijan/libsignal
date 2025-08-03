@@ -3,14 +3,14 @@
 //
 
 use hmac::{Hmac, Mac};
-use libsignal_account_keys::proto::backup_metadata::{self, MetadataPb, NextBackupPb};
-use libsignal_account_keys::proto::Message as _;
 use libsignal_account_keys::{
     BackupForwardSecrecyEncryptionKey, BackupForwardSecrecyToken, BackupKey,
 };
 use libsignal_net_infra::ws::WebSocketServiceError;
 use libsignal_net_infra::ws2::attested::AttestedConnectionError;
+use libsignal_svrb::proto::backup_metadata;
 use libsignal_svrb::{Backup4, Secret};
+use protobuf::Message;
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng, TryRngCore};
 use sha2::Sha256;
@@ -94,7 +94,7 @@ impl From<libsignal_svrb::Error> for Error {
         match err {
             LogicError::RestoreFailed(tries_remaining) => Self::RestoreFailed(tries_remaining),
             LogicError::BadResponseStatus(libsignal_svrb::ErrorStatus::Missing)
-            | LogicError::BadResponseStatus4(libsignal_svrb::V4Status::Missing) => {
+            | LogicError::BadResponseStatus4(libsignal_svrb::V4Status::MISSING) => {
                 Self::DataMissing
             }
             LogicError::BadData
@@ -192,65 +192,92 @@ pub struct BackupFileMetadataRef<'a>(pub &'a [u8]);
 pub struct BackupPreviousSecretData(pub Vec<u8>);
 pub struct BackupPreviousSecretDataRef<'a>(pub &'a [u8]);
 
-pub struct PrepareBackupResponse {
-    pub handle: BackupHandle,
+impl BackupFileMetadata {
+    pub fn as_ref(&self) -> BackupFileMetadataRef {
+        BackupFileMetadataRef(&self.0)
+    }
+}
+
+impl BackupPreviousSecretData {
+    pub fn as_ref(&self) -> BackupPreviousSecretDataRef {
+        BackupPreviousSecretDataRef(&self.0)
+    }
+}
+
+pub struct BackupResponse {
     pub forward_secrecy_token: BackupForwardSecrecyToken,
     pub next_backup_data: BackupPreviousSecretData,
     pub metadata: BackupFileMetadata,
 }
 
-pub fn prepare_backup<SvrB: traits::Backup>(
+fn create_backup<SvrB: traits::Backup, R: Rng + CryptoRng>(
     svrb: &SvrB,
     backup_key: &BackupKey,
-    previous_backup_data: Option<BackupPreviousSecretDataRef>,
-) -> Result<PrepareBackupResponse, Error> {
-    let mut rng = OsRng.unwrap_err();
-    let password_salt = random_32b(&mut rng);
+    rng: &mut R,
+) -> (Backup4, [u8; 32]) {
+    let password_salt = random_32b(rng);
     let password_key = backup_key.derive_forward_secrecy_password(&password_salt).0;
-    let forward_secrecy_token = BackupForwardSecrecyToken(random_32b(&mut rng));
-    let backup4 = svrb.prepare(&password_key);
-    let encryption_key_salt = backup4.output;
-    let encryption_key = backup_key.derive_forward_secrecy_encryption_key(&encryption_key_salt);
-    let mut next_backup_pb = NextBackupPb::default();
-    let mut metadata_pb = MetadataPb::default();
+    (svrb.prepare(&password_key), password_salt)
+}
 
-    next_backup_pb
-        .pair
-        .push(backup_metadata::next_backup_pb::Pair {
+pub async fn store_backup<SvrB: traits::Backup>(
+    svrb: &SvrB,
+    backup_key: &BackupKey,
+    previous_backup_data: Option<BackupPreviousSecretDataRef<'_>>,
+) -> Result<BackupResponse, Error> {
+    let mut rng = OsRng.unwrap_err();
+    let (prev_backup4, prev_password_salt) = if let Some(pbd) = previous_backup_data {
+        let parsed = backup_metadata::NextBackupPb::parse_from_bytes(pbd.0)
+            .map_err(|_| Error::PreviousBackupDataInvalid)?;
+        (
+            Backup4::from_pb(
+                parsed
+                    .backup4
+                    .into_option()
+                    .ok_or(Error::PreviousBackupDataInvalid)?,
+            )?,
+            parsed
+                .pw_salt
+                .try_into()
+                .map_err(|_| Error::PreviousBackupDataInvalid)?,
+        )
+    } else {
+        // If this is the first backup, then we generate this key as well.
+        // This allows the second backup onwards to work as expected.  Were
+        // we to use `next_backup` here, then the first backup would be
+        // accessible longer than subsequent ones.
+        create_backup(svrb, backup_key, &mut rng)
+    };
+    let (next_backup4, next_password_salt) = create_backup(svrb, backup_key, &mut rng);
+    let forward_secrecy_token = BackupForwardSecrecyToken(random_32b(&mut rng));
+
+    let mut metadata_pb = backup_metadata::MetadataPb::default();
+    for (encryption_key_salt, password_salt) in [
+        (prev_backup4.output, prev_password_salt),
+        (next_backup4.output, next_password_salt),
+    ] {
+        let encryption_key = backup_key.derive_forward_secrecy_encryption_key(&encryption_key_salt);
+        metadata_pb.pair.push(backup_metadata::metadata_pb::Pair {
             pw_salt: password_salt.to_vec(),
-            encryption_key_salt: encryption_key_salt.to_vec(),
+            ct: aes_256_ctr_encrypt_hmacsha256(&encryption_key, &forward_secrecy_token.0)?,
             ..Default::default()
         });
-    metadata_pb.pair.push(backup_metadata::metadata_pb::Pair {
-        pw_salt: password_salt.to_vec(),
-        ct: aes_256_ctr_encrypt_hmacsha256(&encryption_key, &forward_secrecy_token.0)?,
-        ..Default::default()
-    });
+    }
 
-    if let Some(prev) = previous_backup_data {
-        let previous_backup_pb =
-            NextBackupPb::parse_from_bytes(prev.0).map_err(|_| Error::PreviousBackupDataInvalid)?;
-        if !previous_backup_pb.pair.is_empty() {
-            // Add in another pair using the most recent key.
-            let p = &previous_backup_pb.pair[0];
-            let encryption_key =
-                backup_key.derive_forward_secrecy_encryption_key(&p.encryption_key_salt);
-            next_backup_pb.pair.push(p.clone());
-            metadata_pb.pair.push(backup_metadata::metadata_pb::Pair {
-                pw_salt: p.pw_salt.clone(),
-                ct: aes_256_ctr_encrypt_hmacsha256(&encryption_key, &forward_secrecy_token.0)?,
-                ..Default::default()
-            });
-        }
+    let next_backup_pb = backup_metadata::NextBackupPb {
+        pw_salt: next_password_salt.to_vec(),
+        backup4: protobuf::MessageField::some(next_backup4.into_pb()),
+        ..Default::default()
     };
 
-    Ok(PrepareBackupResponse {
-        handle: BackupHandle(backup4),
+    svrb.finalize(&prev_backup4).await?;
+
+    Ok(BackupResponse {
         forward_secrecy_token,
         next_backup_data: BackupPreviousSecretData(
-            next_backup_pb.write_to_bytes().expect("can serialize"),
+            next_backup_pb.write_to_bytes().expect("should serialize"),
         ),
-        metadata: BackupFileMetadata(metadata_pb.write_to_bytes().expect("can serialize")),
+        metadata: BackupFileMetadata(metadata_pb.write_to_bytes().expect("should serialize")),
     })
 }
 
@@ -283,7 +310,8 @@ pub async fn restore_backup<SvrB: traits::Restore>(
     backup_key: &BackupKey,
     metadata: BackupFileMetadataRef<'_>,
 ) -> Result<BackupForwardSecrecyToken, Error> {
-    let metadata = MetadataPb::parse_from_bytes(metadata.0).map_err(|_| Error::MetadataInvalid)?;
+    let metadata = backup_metadata::MetadataPb::parse_from_bytes(metadata.0)
+        .map_err(|_| Error::MetadataInvalid)?;
     if metadata.pair.is_empty() {
         return Err(Error::MetadataInvalid);
     }
@@ -334,10 +362,11 @@ where
 #[cfg(feature = "test-util")]
 pub mod test_support {
 
+    use libsignal_net_infra::testutil::no_network_change_events;
+
     use crate::auth::Auth;
     use crate::enclave::PpssSetup;
     use crate::env::SvrBEnv;
-    use crate::svrb::direct::DirectConnect as _;
 
     impl SvrBEnv<'static> {
         /// Simplest way to connect to an SVRB Environment in integration tests, command
@@ -346,8 +375,7 @@ pub mod test_support {
             &self,
             auth: &Auth,
         ) -> <Self as PpssSetup>::ConnectionResults {
-            let endpoints = self.sgx();
-            endpoints.connect(auth).await
+            super::direct::direct_connect(self.sgx(), auth, &no_network_change_events()).await
         }
     }
 }
@@ -506,18 +534,17 @@ mod test {
         )
         .expect("should create AEP");
         let backup_key = BackupKey::derive_from_account_entropy_pool(&aep);
-        let prepared = prepare_backup(&svrb, &backup_key, None).expect("should prepare");
-        finalize_backup(&svrb, &prepared.handle)
+        let backup = store_backup(&svrb, &backup_key, None)
             .await
-            .expect("should finalize");
+            .expect("should store");
         let restored = restore_backup(
             &svrb,
             &backup_key,
-            BackupFileMetadataRef(&prepared.metadata.0),
+            BackupFileMetadataRef(&backup.metadata.0),
         )
         .await
         .expect("should restore");
-        assert_eq!(prepared.forward_secrecy_token.0, restored.0);
+        assert_eq!(backup.forward_secrecy_token.0, restored.0);
     }
 
     #[tokio::test]
@@ -536,15 +563,14 @@ mod test {
         )
         .expect("should create AEP");
         let backup_key = BackupKey::derive_from_account_entropy_pool(&aep);
-        let prepared = prepare_backup(&svrb, &backup_key, None).expect("should prepare");
-        finalize_backup(&svrb, &prepared.handle)
+        let backup = store_backup(&svrb, &backup_key, None)
             .await
-            .expect("should finalize");
+            .expect("should store");
         assert!(matches!(
             restore_backup(
                 &svrb,
                 &backup_key,
-                BackupFileMetadataRef(&prepared.metadata.0)
+                BackupFileMetadataRef(&backup.metadata.0)
             )
             .await
             .unwrap_err(),

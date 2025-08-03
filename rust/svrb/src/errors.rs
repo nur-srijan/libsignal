@@ -4,8 +4,6 @@
 //
 use std::fmt;
 
-use prost::DecodeError;
-
 use crate::proto::svrb;
 
 #[derive(Debug, displaydoc::Display, PartialEq)]
@@ -28,7 +26,7 @@ pub enum Error {
 
 impl std::fmt::Display for svrb::response4::Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str_name())
+        write!(f, "{:?}", self)
     }
 }
 
@@ -37,14 +35,7 @@ impl std::fmt::Display for svrb::response4::Status {
 pub enum ErrorStatus {
     Unset,
     Missing,
-    InvalidRequest,
     Error,
 }
 
 impl std::error::Error for Error {}
-
-impl From<DecodeError> for Error {
-    fn from(_err: DecodeError) -> Self {
-        Self::BadData
-    }
-}

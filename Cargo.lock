@@ -515,6 +515,8 @@ version = "1.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "525046617d8376e3db1deffb079e91cef90a89fc3ca5c185bbf8c9ecdd15cd5c"
 dependencies = [
+ "jobserver",
+ "libc",
  "shlex",
 ]
 
@@ -1116,6 +1118,12 @@ name = "downcast-rs"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
+
+[[package]]
+name = "dunce"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
 name = "dyn-clonable"
@@ -2157,6 +2165,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8eaf4bc02d17cbdd7ff4c7438cafcdf7fb9a4613313ad11b4f8fefe7d3fa0130"
 
 [[package]]
+name = "jobserver"
+version = "0.1.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38f262f097c174adebe41eb73d66ae9c06b2844fb0da69969647bbddd9b0538a"
+dependencies = [
+ "getrandom 0.3.2",
+ "libc",
+]
+
+[[package]]
 name = "js-sys"
 version = "0.3.77"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2258,7 +2276,6 @@ dependencies = [
  "libcrux-intrinsics 0.0.2",
  "libcrux-platform",
  "libcrux-sha3 0.0.2",
- "rand 0.9.0",
 ]
 
 [[package]]
@@ -2355,6 +2372,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm-siv",
  "assert_matches",
+ "async-trait",
  "attest",
  "base64 0.22.1",
  "bincode",
@@ -2466,6 +2484,7 @@ dependencies = [
  "libsignal-net",
  "libsignal-net-chat",
  "libsignal-protocol",
+ "libsignal-svrb",
  "linkme",
  "log",
  "mediasan-common",
@@ -2519,6 +2538,8 @@ dependencies = [
  "foreign-types",
  "hex",
  "log",
+ "pqcrypto-dilithium",
+ "pqcrypto-traits",
  "proptest",
  "rand 0.9.0",
  "sha2",
@@ -2530,7 +2551,7 @@ dependencies = [
 
 [[package]]
 name = "libsignal-ffi"
-version = "0.76.7"
+version = "0.77.0"
 dependencies = [
  "cpufeatures",
  "hex",
@@ -2550,14 +2571,14 @@ dependencies = [
 
 [[package]]
 name = "libsignal-jni"
-version = "0.76.7"
+version = "0.77.0"
 dependencies = [
  "libsignal-jni-impl",
 ]
 
 [[package]]
 name = "libsignal-jni-impl"
-version = "0.76.7"
+version = "0.77.0"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -2574,7 +2595,7 @@ dependencies = [
 
 [[package]]
 name = "libsignal-jni-testing"
-version = "0.76.7"
+version = "0.77.0"
 dependencies = [
  "jni",
  "libsignal-bridge-testing",
@@ -2636,12 +2657,14 @@ dependencies = [
  "libsignal-message-backup",
  "libsignal-message-backup-macros",
  "libsignal-protocol",
+ "libsignal-svrb",
  "log",
  "macro_rules_attribute",
  "mediasan-common",
  "nonzero_ext",
  "once_cell",
  "pretty_assertions",
+ "prost",
  "protobuf",
  "protobuf-codegen",
  "protobuf-json-mapping",
@@ -2713,6 +2736,7 @@ dependencies = [
  "proptest",
  "prost",
  "prost-build",
+ "protobuf",
  "rand 0.9.0",
  "rand_chacha 0.9.0",
  "rand_core 0.9.3",
@@ -2740,7 +2764,6 @@ dependencies = [
  "visibility",
  "warp",
  "zerocopy",
- "zkgroup",
 ]
 
 [[package]]
@@ -2823,6 +2846,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "prost",
+ "prost-build",
  "rand 0.9.0",
  "rand_core 0.9.3",
  "rangemap",
@@ -2846,11 +2870,12 @@ dependencies = [
  "tungstenite 0.26.2",
  "visibility",
  "warp",
+ "zerocopy",
 ]
 
 [[package]]
 name = "libsignal-node"
-version = "0.76.7"
+version = "0.77.0"
 dependencies = [
  "cmake",
  "futures",
@@ -2921,8 +2946,8 @@ dependencies = [
  "hkdf",
  "nonzero_ext",
  "proptest",
- "prost",
- "prost-build",
+ "protobuf",
+ "protobuf-codegen",
  "rand 0.9.0",
  "rand_core 0.9.3",
  "sha2",
@@ -3700,6 +3725,37 @@ checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
 ]
+
+[[package]]
+name = "pqcrypto-dilithium"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "685de0fa68c6786559d5fcdaa414f0cd68ef3f5d162f61823bd7424cd276726f"
+dependencies = [
+ "cc",
+ "glob",
+ "libc",
+ "pqcrypto-internals",
+ "pqcrypto-traits",
+]
+
+[[package]]
+name = "pqcrypto-internals"
+version = "0.2.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f408e9e302fffe05f781c95777cb36bbfc51daccf518c28c5829d49a989df22"
+dependencies = [
+ "cc",
+ "dunce",
+ "getrandom 0.2.15",
+ "libc",
+]
+
+[[package]]
+name = "pqcrypto-traits"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94e851c7654eed9e68d7d27164c454961a616cf8c203d500607ef22c737b51bb"
 
 [[package]]
 name = "predicates"
@@ -4722,8 +4778,8 @@ dependencies = [
 
 [[package]]
 name = "spqr"
-version = "0.1.0"
-source = "git+https://github.com/signalapp/SparsePostQuantumRatchet.git?tag=v1.0.0#d6c10734689ec5844d09c1a054a288d36cde2adc"
+version = "1.2.0"
+source = "git+https://github.com/signalapp/SparsePostQuantumRatchet.git?tag=v1.2.0#99a759a3fd40cd9304459fb007fcf177db9ed207"
 dependencies = [
  "cpufeatures",
  "curve25519-dalek",
@@ -4733,6 +4789,7 @@ dependencies = [
  "libcrux-hkdf",
  "libcrux-hmac",
  "libcrux-ml-kem",
+ "log",
  "num_enum",
  "prost",
  "prost-build",

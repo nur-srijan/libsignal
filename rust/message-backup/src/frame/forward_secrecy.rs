@@ -6,8 +6,8 @@
 use std::io;
 
 use futures::AsyncRead;
-use libsignal_account_keys::proto::backup_metadata::metadata_pb::Pair as ForwardSecrecyPair;
-use libsignal_account_keys::proto::backup_metadata::MetadataPb;
+use libsignal_svrb::proto::backup_metadata::metadata_pb::Pair as ForwardSecrecyPair;
+use libsignal_svrb::proto::backup_metadata::MetadataPb;
 use protobuf::Message;
 
 use crate::frame::{FramesReader, ValidationError};
