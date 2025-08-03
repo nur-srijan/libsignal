@@ -24,6 +24,14 @@ public class PrivateKey: ClonableHandleOwner<SignalMutPointerPrivateKey>, @unche
         }
     }
 
+    public static func generateDilithium2() -> PrivateKey {
+        return failOnError {
+            try invokeFnReturningNativeHandle {
+                signal_privatekey_generate_dilithium2($0)
+            }
+        }
+    }
+
     override internal class func cloneNativeHandle(
         _ newHandle: inout SignalMutPointerPrivateKey,
         currentHandle: SignalConstPointerPrivateKey
